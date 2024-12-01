@@ -163,7 +163,29 @@ def empirical_bayes(cov_func, X_train, Y_train, unconstrained_hyperparams_init, 
     return (unconstrained_hyperparams, val)
 #
 
+def conditional_log_marginal_likelihood(cov_func, X_con, Y_con):
+    X_star = X_con[1]
+    Y_test = Y_con[1]
+
+    def clml_function(unconstrained_hyperparams):
+        hyperparams = param_transform(unconstrained_hyperparams)
+        posterior_predictive = gp_posterior(cov_func, X_con[0], Y_con[0], hyperparams)
+        (posterior_mean, posterior_var) = posterior_predictive(X_star)
+        return -neg_log_predictive_density(Y_test, posterior_mean, posterior_var, hyperparams[0])
+    
+    return clml_function
 
 
-# import pdb
-# pdb.set_trace()
+
+def clml_opt(cov_func, X_con, Y_con, unconstrained_hyperparams_init, step_size, T):
+    clml_function = conditional_log_marginal_likelihood(cov_func, X_con[0], Y_con[0])
+    val_grad_lml_function = value_and_grad(clml_function)
+    unconstrained_hyperparams = unconstrained_hyperparams_init
+    for i in range(T):
+        val, grad = val_grad_lml_function(unconstrained_hyperparams)
+        unconstrained_hyperparams += grad * step_size
+    #
+    return (unconstrained_hyperparams, val)
+#
+
+
