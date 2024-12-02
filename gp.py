@@ -159,7 +159,7 @@ def empirical_bayes(cov_func, X_train, Y_train, unconstrained_hyperparams_init, 
     unconstrained_hyperparams = unconstrained_hyperparams_init
     for i in range(T):
         val, grad = val_grad_lml_function(unconstrained_hyperparams)
-        print(i, val)
+        # print(i, val)
         unconstrained_hyperparams += grad * step_size
     #
     # print(val)
@@ -185,7 +185,7 @@ def clml_opt(cov_func, X_con, Y_con, unconstrained_hyperparams_init, step_size, 
     unconstrained_hyperparams = unconstrained_hyperparams_init
     for i in range(T):
         val, grad = val_grad_function(unconstrained_hyperparams)
-        print(i, val)
+        # print(i, val)
         unconstrained_hyperparams += grad * step_size
     #
     # print(val)
@@ -236,10 +236,17 @@ def opt_clmls(clml_vals):
     x_data = np.arange(len(clml_vals))  # x values (same as indices)
     y_data = np.array(clml_vals)  # y values
 
-    x_mean = np.mean(x_data)
-    y_mean = np.mean(y_data)
+    weights = np.arange(1, len(clml_vals) + 1)
+    w_sum = np.sum(weights)
+    x_mean = np.sum(weights * x_data) / w_sum
+    y_mean = np.sum(weights * y_data) / w_sum
 
-    b = np.sum((x_data - x_mean) * (y_data - y_mean)) / np.sum((x_data - x_mean) ** 2)
+    # Weighted covariance and variance
+    covariance = np.sum(weights * (x_data - x_mean) * (y_data - y_mean))
+    variance = np.sum(weights * (x_data - x_mean) ** 2)
+
+    # Compute slope (b) and intercept (a)
+    b = covariance / variance
     a = y_mean - b * x_mean
     # print(a, b)
     return a, b
@@ -275,7 +282,7 @@ def clmls_opt(cov_func, X_seq, Y_seq, unconstrained_hyperparams_init, step_size,
     unconstrained_hyperparams = unconstrained_hyperparams_init
     for i in range(T):
         val, grad = val_grad_function(unconstrained_hyperparams)
-        print(i, val)
+        # print(i, val)
         unconstrained_hyperparams += grad * step_size
     #
     return (unconstrained_hyperparams, val)
