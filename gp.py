@@ -3,6 +3,7 @@ from jax import random
 import jax.numpy as np
 from jax.scipy.linalg import cho_factor,cho_solve # necessary for Cholesky factorization
 from jax import value_and_grad
+from scipy.optimize import curve_fit
 
 jax.config.update("jax_enable_x64", True)
 
@@ -174,15 +175,100 @@ def conditional_log_marginal_likelihood(cov_func, X_con, Y_con):
         return -neg_log_predictive_density(Y_test, posterior_mean, posterior_var, hyperparams[0])
     
     return clml_function
-
-
+#
 
 def clml_opt(cov_func, X_con, Y_con, unconstrained_hyperparams_init, step_size, T):
-    clml_function = conditional_log_marginal_likelihood(cov_func, X_con[0], Y_con[0])
-    val_grad_lml_function = value_and_grad(clml_function)
+    clml_function = conditional_log_marginal_likelihood(cov_func, X_con, Y_con)
+    val_grad_function = value_and_grad(clml_function)
     unconstrained_hyperparams = unconstrained_hyperparams_init
     for i in range(T):
-        val, grad = val_grad_lml_function(unconstrained_hyperparams)
+        val, grad = val_grad_function(unconstrained_hyperparams)
+        unconstrained_hyperparams += grad * step_size
+    #
+    return (unconstrained_hyperparams, val)
+#
+
+
+
+
+
+
+
+
+# Define the model using JAX (replacing the NumPy model)
+def clmls_model(x, paras):
+    a,b,c,d = paras
+    return a - b * np.exp(-c * x + d)
+
+# Define the loss function (sum of squared errors)
+def mse(x_data, y_data, seq_len=8):
+    weights = np.arange(seq_len-1)+1
+    weights = weights**2
+
+#######################################################
+    # weights = np.array([1,1,1,1,1,1,1])
+    def mse_function(paras):
+        a,b,c,d = paras
+        y_pred = clmls_model(x_data, paras)
+        return np.sum( np.dot((y_data - y_pred)**2, weights))
+    #
+    return mse_function
+
+# Optimization function using JAX
+def opt_clmls(clml_vals, T=200, step_size=1e-4):
+    # Data setup
+    x_data = np.arange(len(clml_vals))  # x values (same as indices)
+    y_data = np.array(clml_vals)  # y values
+    para_init = np.array([clml_vals[-1], 1.0, 1.0, -1.0])
+
+    mse_function = mse(x_data, y_data)
+    val_grad_function = value_and_grad(mse_function)
+    para = para_init
+    for i in range(T):
+        val, grad = val_grad_function(para)
+        para -= grad * step_size
+    #
+    return para
+
+# def clmls_model(x, a, b, c, d):
+#         return a - b*np.exp(-c*x+d)
+
+# def opt_clmls(clml_vals):
+#     x_data = np.arange(len(clml_vals))
+#     y_data = np.array(clml_vals)
+#     para_init = [clml_vals[-1], 1, 1, -1]
+#     params, _ = curve_fit(clmls_model, x_data, y_data, p0=para_init)
+#     # print(params)
+#     return params
+
+
+def conditional_log_marginal_likelihood_sequence(cov_func, X_seq, Y_seq):
+    seq_len = len(X_seq)
+    clml_functions = []
+    for i in range(seq_len-1):
+        X_con = [np.concatenate(X_seq[:i+1], axis=0), X_seq[seq_len-1]]
+        Y_con = [np.concatenate(Y_seq[:i+1], axis=0), Y_seq[seq_len-1]]
+        clml_function = conditional_log_marginal_likelihood(cov_func, X_con, Y_con)
+        clml_functions.append(clml_function)
+    #
+
+    def clmls_function(unconstrained_hyperparams):
+        clmls_vals = [f(unconstrained_hyperparams) for f in clml_functions]
+        print(np.array(clmls_vals))
+        return opt_clmls(clmls_vals)[0]
+        # return np.array(clmls_vals)
+    #
+
+    return clmls_function
+#
+
+def clmls_opt(cov_func, X_seq, Y_seq, unconstrained_hyperparams_init, step_size, T):
+    clmls_function = conditional_log_marginal_likelihood_sequence(cov_func, X_seq, Y_seq)
+    val_grad_function = value_and_grad(clmls_function)
+    unconstrained_hyperparams = unconstrained_hyperparams_init
+    for i in range(T):
+        print(i)
+        val, grad = val_grad_function(unconstrained_hyperparams)
         unconstrained_hyperparams += grad * step_size
     #
     return (unconstrained_hyperparams, val)
