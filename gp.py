@@ -159,7 +159,7 @@ def empirical_bayes(cov_func, X_train, Y_train, unconstrained_hyperparams_init, 
     unconstrained_hyperparams = unconstrained_hyperparams_init
     for i in range(T):
         val, grad = val_grad_lml_function(unconstrained_hyperparams)
-        # print(i, val)
+        print(i, val)
         unconstrained_hyperparams += grad * step_size
     #
     # print(val)
@@ -185,7 +185,7 @@ def clml_opt(cov_func, X_con, Y_con, unconstrained_hyperparams_init, step_size, 
     unconstrained_hyperparams = unconstrained_hyperparams_init
     for i in range(T):
         val, grad = val_grad_function(unconstrained_hyperparams)
-        # print(i, val)
+        print(i, val)
         unconstrained_hyperparams += grad * step_size
     #
     # print(val)
@@ -252,7 +252,7 @@ def opt_clmls(clml_vals):
     return a, b
 
 
-def conditional_log_marginal_likelihood_sequence(cov_func, X_seq, Y_seq):
+def conditional_log_marginal_likelihood_sequence(cov_func, X_seq, Y_seq, whole_sequence=False):
     seq_len = len(X_seq)
     clml_functions = []
     for i in range(seq_len-1):
@@ -266,11 +266,12 @@ def conditional_log_marginal_likelihood_sequence(cov_func, X_seq, Y_seq):
 
     def clmls_function(unconstrained_hyperparams):
         clmls_vals = [f(unconstrained_hyperparams) for f in clml_functions]
-        abcd = opt_clmls(clmls_vals)
+        ab = opt_clmls(clmls_vals)
         # print(np.array(clmls_vals))
         # print(abcd)
-        return abcd[0] + abcd[1] * len(clmls_vals)
-        # return np.array(clmls_vals)
+        if whole_sequence:
+            return np.array(clmls_vals)
+        return ab[0] + ab[1] * len(clmls_vals)
     #
 
     return clmls_function
@@ -282,9 +283,10 @@ def clmls_opt(cov_func, X_seq, Y_seq, unconstrained_hyperparams_init, step_size,
     unconstrained_hyperparams = unconstrained_hyperparams_init
     for i in range(T):
         val, grad = val_grad_function(unconstrained_hyperparams)
-        # print(i, val)
+        print(i, val)
         unconstrained_hyperparams += grad * step_size
     #
+    # print(val)
     return (unconstrained_hyperparams, val)
 #
 
