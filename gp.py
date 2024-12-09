@@ -3,7 +3,7 @@ from jax import random
 import jax.numpy as np
 from jax.scipy.linalg import cho_factor,cho_solve # necessary for Cholesky factorization
 from jax import value_and_grad
-from scipy.optimize import curve_fit
+# from scipy.optimize import curve_fit
 
 jax.config.update("jax_enable_x64", True)
 
