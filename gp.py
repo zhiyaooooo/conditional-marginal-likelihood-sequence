@@ -9,43 +9,29 @@ jax.config.update("jax_enable_x64", True)
 
 prng_key = random.key(0)
 
-'''
-Initialize the PRNG with unique `seed`.
-'''
 def init_prng(seed):
     global prng_key
     prng_key = random.PRNGKey(seed)
     return prng_key
 #
 
-'''
-Whenever you call random, you need to pass in as the first argument a call to this function.
-This will advance the PRNG.
-'''
 def grab_prng():
     global prng_key
     _,prng_key = random.split(prng_key)
     return prng_key
 #
 
-'''
-Transform unconstrained hyperparameters to constrained (ensure strictly positive).
-'''
+# transform unconstrained hyperparameters to constrained (ensure strictly positive).
 def param_transform(unconstrained_hyperparams):
     return np.exp(unconstrained_hyperparams)
 #
 
-'''
-Transform constrained hyperparameters to unconstrained
-'''
+# transform constrained hyperparameters to unconstrained
 def inverse_param_transform(hyperparams):
     return np.log(hyperparams)
 #
 
-'''
-Evaluate the squared-exponential kernel between all pairs of points from X1 and X2, using kernel hyperparameters (hyperparams).
-NOTE: exclude adding the noise variance. This should be added to the covariance when considering just training data.
-'''
+# evaluate the squared-exponential kernel between all pairs of points from X1 and X2, using kernel hyperparameters (hyperparams).
 def sqexp_cov_function(X1, X2, hyperparams):
     noise_variance = hyperparams[0]
     signal_variance = hyperparams[1]
@@ -56,10 +42,7 @@ def sqexp_cov_function(X1, X2, hyperparams):
     return signal_variance * np.exp(- sqr_dis / l)
 #
 
-'''
-Evaluate the Mahalanobis-based squared-exponential kernel between all pairs of points from X1 and X2, using kernel hyperparameters (hyperparams).
-NOTE: exclude adding the noise variance.
-'''
+# evaluate the Mahalanobis-based squared-exponential kernel between all pairs of points from X1 and X2, using kernel hyperparameters (hyperparams).
 def sqexp_mahalanobis_cov_function(X1, X2, hyperparams):
     noise_variance = hyperparams[0]
     signal_variance = hyperparams[1]
@@ -72,12 +55,7 @@ def sqexp_mahalanobis_cov_function(X1, X2, hyperparams):
     return signal_variance * np.exp(- sqr_dis)
 #
 
-'''
-Compute the log marginal likelihood.
-This function should return another function (lml_function) that will be your objective function, passed to JAX for value_and_grad.
-It should only require the unconstrained hyperparameters as input. In resppnse, JAX will return gradients for the hyperparameters.
-The covariance function, X_train and Y_train will be referenced from within the lml_function.
-'''
+# compute the log marginal likelihood (LML)
 def log_marginal_likelihood(cov_func, X_train, Y_train):
     N = X_train.shape[0]
     def lml_function(unconstrained_hyperparams):
@@ -100,11 +78,7 @@ def log_marginal_likelihood(cov_func, X_train, Y_train):
     return lml_function
 #
 
-'''
-In the outer function, precompute what is necessary in forming the GP posterior (mean and variance).
-The inner function will then actually compute the posterior, given test inputs X_star.
-It should return a 2-tuple, consisting of the posterior mean and variance.
-'''
+# gaussian process
 def gp_posterior(cov_func, X_train, Y_train, hyperparams):
     N = X_train.shape[0]
     noise_variance = hyperparams[0]
@@ -129,10 +103,7 @@ def gp_posterior(cov_func, X_train, Y_train, hyperparams):
     return posterior_predictive
 #
 
-'''
-Compute the negative log of the predictive density, given (1) ground-truth labels Y_test, (2) the posterior mean for the test inputs,
-(3) the posterior variance for the test inputs, and (4) the noise variance (to be added to posterior variance)
-'''
+# compute the negative log of the predictive density (NLPD)
 def neg_log_predictive_density(Y_test, posterior_mean, posterior_var, noise_variance):
     D = Y_test.shape[0] # number of test samples
     miu_hat = posterior_mean
@@ -143,16 +114,7 @@ def neg_log_predictive_density(Y_test, posterior_mean, posterior_var, noise_vari
     return 0.5 * (D*np.log(2*np.pi) + 2*np.sum(np.log(np.diag(Lower))) + np.transpose(dif)@cho_solve(cfac, dif))
 #
 
-'''
-Your main optimization loop.
-cov_func shoud be either sqexp_cov_function or sqexp_mahalanobis_cov_function.
-X_train and Y_train are the training inputs and labels, respectively.
-unconstrained_hyperparams_init is the initialization for optimization.
-step_size is the gradient ascent step size.
-T is the number of steps of gradient ascent to take.
-This function should return a 2-tuple, containing (1) the results of optimization (unconstrained hyperparameters), and
-(2) the log marginal likelihood at the last step of optimization.
-'''
+# optimization loop based on LML
 def empirical_bayes(cov_func, X_train, Y_train, unconstrained_hyperparams_init, step_size, T):
     lml_function = log_marginal_likelihood(cov_func, X_train, Y_train)
     val_grad_lml_function = value_and_grad(lml_function)
@@ -166,6 +128,7 @@ def empirical_bayes(cov_func, X_train, Y_train, unconstrained_hyperparams_init, 
     return (unconstrained_hyperparams, val)
 #
 
+# calculate the conditional log marginal likelihood (CLML)
 def conditional_log_marginal_likelihood(cov_func, X_con, Y_con):
     X_star = X_con[1]
     Y_test = Y_con[1]
@@ -179,6 +142,7 @@ def conditional_log_marginal_likelihood(cov_func, X_con, Y_con):
     return clml_function
 #
 
+# optimization loop based on CLML
 def clml_opt(cov_func, X_con, Y_con, unconstrained_hyperparams_init, step_size, T):
     clml_function = conditional_log_marginal_likelihood(cov_func, X_con, Y_con)
     val_grad_function = value_and_grad(clml_function)
@@ -192,19 +156,10 @@ def clml_opt(cov_func, X_con, Y_con, unconstrained_hyperparams_init, step_size, 
     return (unconstrained_hyperparams, val)
 #
 
-
-
-
-
-
-
-
-# # Define the model using JAX (replacing the NumPy model)
 # def clmls_model(x, paras):
 #     a,b,c,d = paras
 #     return a - b * np.exp(-c * x + d)
 
-# # Define the loss function (sum of squared errors)
 # def mse(x_data, y_data, seq_len=8):
 
 #     def mse_function(paras):
@@ -214,7 +169,6 @@ def clml_opt(cov_func, X_con, Y_con, unconstrained_hyperparams_init, step_size, 
 #     #
 #     return mse_function
 
-# Optimization function using JAX
 # def opt_clmls(clml_vals, T=200, step_size=1e-4):
 #     # Data setup
 #     x_data = np.arange(len(clml_vals))  # x values (same as indices)
@@ -230,7 +184,7 @@ def clml_opt(cov_func, X_con, Y_con, unconstrained_hyperparams_init, step_size, 
 #     #
 #     return para
 
-# linear regression
+# linear regression model to fit CLMLS
 def opt_clmls(clml_vals):
     # Data setup
     x_data = np.arange(len(clml_vals))  # x values (same as indices)
@@ -251,7 +205,7 @@ def opt_clmls(clml_vals):
     # print(a, b)
     return a, b
 
-
+# calculate the goodness of CLMLS using linear regression
 def conditional_log_marginal_likelihood_sequence(cov_func, X_seq, Y_seq, whole_sequence=False):
     seq_len = len(X_seq)
     clml_functions = []
@@ -271,12 +225,13 @@ def conditional_log_marginal_likelihood_sequence(cov_func, X_seq, Y_seq, whole_s
         # print(abcd)
         if whole_sequence:
             return np.array(clmls_vals)
-        return ab[0] + ab[1] * len(clmls_vals)
+        return ab[0] + ab[1] * len(clmls_vals) # calculate next value of sequence as prediction
     #
 
     return clmls_function
 #
 
+# optimization loop based on CLMLS
 def clmls_opt(cov_func, X_seq, Y_seq, unconstrained_hyperparams_init, step_size, T):
     clmls_function = conditional_log_marginal_likelihood_sequence(cov_func, X_seq, Y_seq)
     val_grad_function = value_and_grad(clmls_function)
